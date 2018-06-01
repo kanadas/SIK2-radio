@@ -6,7 +6,8 @@
 
 //-------------PARAMETERS--------------
 
-const uint16_t MAX_NAME_LENGTH = 64;
+#define MAX_NAME_LENGTH 64
+#define TTL_VALUE 4
 
 //Flag settable parameters
 int32_t MCAST_ADDR;
