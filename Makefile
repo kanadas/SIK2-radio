@@ -1,4 +1,4 @@
-TARGETS = nadajnik
+TARGETS = sikradio-sender
 DEPS = nadajnik.h config.h circular_fifo.h err.h
 OBJ = nadajnik.o circular_fifo.o nadajnik_send.o nadajnik_recv.o err.o config.o
 
@@ -11,7 +11,7 @@ all: $(TARGETS)
 %.o: %.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)
 
-nadajnik: $(OBJ)
+sikradio-sender: $(OBJ)
 	$(CC) -o $@ $^ $(CFLAGS)
 
 .PHONY: clean TARGET

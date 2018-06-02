@@ -50,7 +50,7 @@ void* nadajnik_recv(void* arg)
 		if (strncmp(msg, LOOKUP, strlen(LOOKUP)) == 0) {
 			sprintf(msg, "%s %s %d %s", REPLY, mc_addr, DATA_PORT, NAZWA);
 
-			printf("Sending %s to %s on port %d\n", msg, inet_ntoa(caddr.sin_addr), caddr.sin_port);
+			//printf("Sending %s to %s on port %d\n", msg, inet_ntoa(caddr.sin_addr), caddr.sin_port);
 
 			if (sendto(sock, msg, strlen(msg), 0, (struct sockaddr *) &caddr, 
 						rcva_len) != (ssize_t)strlen(msg))
