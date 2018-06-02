@@ -82,7 +82,13 @@ int main (int argc, char *argv[])
 			"	-n name (default Nienazwany Nadajnik) \n", argv[0]);
 		return 1;
 	}
-
+	retb = create_retb(8);
+	pthread_t rec_t;
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	pthread_create(&rec_t, &attr, nadajnik_recv, NULL);
 	nadajnik_send();
+	pthread_cancel(rec_t);
+	destroy_retb(&retb);
 	return 0;
 }

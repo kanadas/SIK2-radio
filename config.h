@@ -3,15 +3,17 @@
 
 #include <stdint.h>
 #include <netinet/in.h>
+#include <pthread.h>
 
 //-------------PARAMETERS--------------
 
 #define MAX_NAME_LENGTH 64
 #define TTL_VALUE 4
+#define MAX_CTRL_MSG_LENGTH 1001
 
 //Flag settable parameters
-extern int32_t MCAST_ADDR;
-extern int32_t DISCOVER_ADDR;
+extern uint32_t MCAST_ADDR;
+extern uint32_t DISCOVER_ADDR;
 extern uint16_t DATA_PORT;
 extern uint16_t CTRL_PORT;
 extern uint16_t UI_PORT;
@@ -42,6 +44,20 @@ void delete_pac(audio_package * pac);
 
 //-----------GLOBAL DATA-------------
 
+//Thread safe buffor for managing retransmitions
+typedef struct {
+	uint64_t * buf;
+	uint32_t end, size;
+	pthread_mutex_t mut;
+} retransmit_buf;
+
+extern retransmit_buf retb;
+
+retransmit_buf create_retb(int size);
+void retb_append(retransmit_buf* retb, uint64_t elem);
+//Allocates buffor of elements to retransmit, not less than lowbnd. Returns lenght of result, deletes returned elements from buffor.
+int get_elem_to_ret(retransmit_buf * retb, uint64_t ** buf);
+void destroy_retb(retransmit_buf * retb);
 
 #endif //_RADIO_CONFIG_
 
