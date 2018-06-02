@@ -10,30 +10,38 @@
 #define TTL_VALUE 4
 
 //Flag settable parameters
-int32_t MCAST_ADDR;
-int32_t DISCOVER_ADDR = ~0; //Broadcast
-uint16_t DATA_PORT = 25674;
-uint16_t CTRL_PORT = 35674;
-uint16_t UI_PORT = 15674;
-uint32_t PSIZE = 512;
-uint32_t BSIZE = 64 << 10;
-uint32_t FSIZE = 128 << 10;
-uint32_t RTIME = 250;
-char NAZWA[MAX_NAME_LENGTH] = "Nienazwany Nadajnik";
+extern int32_t MCAST_ADDR;
+extern int32_t DISCOVER_ADDR;
+extern uint16_t DATA_PORT;
+extern uint16_t CTRL_PORT;
+extern uint16_t UI_PORT;
+extern uint32_t PSIZE;
+extern uint32_t BSIZE;
+extern uint32_t FSIZE;
+extern uint32_t RTIME;
+extern char NAZWA[MAX_NAME_LENGTH];
 
 //-----------PROTOCOL---------------
 
 //Format of audio data transmitions
-struct audio_package {
+typedef struct {
 	uint64_t session_id;
 	uint64_t first_byte_num;
-	int8_t audio_data[];
-};
+	uint8_t * audio_data;
+} audio_package;
+
+//If pac->audio_data is NULL then allocates size elements to it
+void bytetopac(audio_package * pac, const uint8_t * buf, uint32_t size);
+void pactobyte(const audio_package * pac, uint8_t * buf, uint32_t size);
+void delete_pac(audio_package * pac);
 
 //Messages
 #define LOOKUP "ZERO_SEVEN_COME_IN"
 #define REPLY "BOREWICZ_HERE"
 #define REXMIT "LOUDER_PLEASE"
+
+//-----------GLOBAL DATA-------------
+
 
 #endif //_RADIO_CONFIG_
 
