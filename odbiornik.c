@@ -9,7 +9,7 @@
 #include <sys/socket.h>
 
 #include "odbiornik.h"
-#include "circular_fifo.h"
+#include "io_buffer.h"
 
 int parse_flags(int argc, char *argv[])
 {
@@ -63,7 +63,56 @@ int parse_flags(int argc, char *argv[])
 	return 0;
 }
 
-circular_fifo buffer;
+io_buffer buffer;
+int buffer_waiting = 1;
+pthread_mutex_t buf_mut;
+int is_station = 0;
+
+int init_socket()
+{
+	int sock;
+	if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
+		syserr("socket");
+	return sock;
+}
+
+void set_socket(int * sock, uint32_t addr, uint16_t port)
+{
+	/* podpięcie się do grupy rozsyłania (ang. multicast) */
+	struct ip_mreq ip_mreq;
+	struct sockaddr_in saddr;
+	ip_mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+	ip_mreq.imr_multiaddr.s_addr = addr;
+	if(setsockopt(*sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (void*)&ip_mreq, sizeof ip_mreq) < 0)
+	  syserr("setsockopt");
+
+	/* podpięcie się pod lokalny adres i port */
+	saddr.sin_family = AF_INET;
+	saddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	saddr.sin_port = htons(port);
+	if (bind(*sock, (struct sockaddr *)&saddr, sizeof saddr) < 0)
+	  syserr("bind");
+}
+
+void reset_record(int * sock)
+{
+	pthread_mutex_lock(&buf_mut);
+	buffer_waiting = 1;
+	set_socket(sock, actual_station.addr, actual_station.port);
+}
+
+void listen()
+{
+	int sock = init_socket();
+	while(1) {
+		//TODO change this 2 if's to some mutex
+		if(is_station) {
+			if(station_changed) reset_record(&sock);
+			//TODO listening
+		}
+	}
+}
+
 
 int main (int argc, char *argv[])
 {
@@ -81,9 +130,8 @@ int main (int argc, char *argv[])
 	//Potrzebuję 3 wątki: Jeden pobiera dane do bufora, drugi je wypisuje, trzeci odpowiada za UI.
 	//Do tego timer odpalający się co LOOKUP_TIME sekund aktualizujący listę stacji
 	//Thread safe lista stacji już jest, potrzebny jeszcze globalny bufor (bardzo prosty wektor).
-	if(create_circ_fifo(&buffer, BSIZE) != 0)
+	if(create_io_buffer(&buffer, BSIZE) != 0)
 		syserr("create buffer");
-	
 	
 
 	/*retb = create_retb(8);
@@ -94,6 +142,6 @@ int main (int argc, char *argv[])
 	nadajnik_send();
 	pthread_cancel(rec_t);
 	destroy_retb(&retb);*/
-	delete_circ_fifo(&buffer);
+	delete_io_buffer(&buffer);
 	return 0;
 }

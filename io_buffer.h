@@ -22,6 +22,10 @@ inline uint32_t buffer_length(const io_buffer * buffer);
 
 inline uint32_t first_byte_num(const io_buffer * buffer);
 
+void clear_buffer(io_buffer * buffer);
+
+char * print_holes(io_buffer * buffer);
+
 void delete_io_buffer(io_buffer * buffer);
 
 #endif //_IO_BUFFER_
