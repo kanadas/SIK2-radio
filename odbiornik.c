@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 
 #include "odbiornik.h"
+#include "circular_fifo.h"
 
 int parse_flags(int argc, char *argv[])
 {
@@ -62,6 +63,8 @@ int parse_flags(int argc, char *argv[])
 	return 0;
 }
 
+circular_fifo buffer;
+
 int main (int argc, char *argv[])
 {
 	if(parse_flags(argc, argv)) {
@@ -78,6 +81,10 @@ int main (int argc, char *argv[])
 	//Potrzebuję 3 wątki: Jeden pobiera dane do bufora, drugi je wypisuje, trzeci odpowiada za UI.
 	//Do tego timer odpalający się co LOOKUP_TIME sekund aktualizujący listę stacji
 	//Thread safe lista stacji już jest, potrzebny jeszcze globalny bufor (bardzo prosty wektor).
+	if(create_circ_fifo(&buffer, BSIZE) != 0)
+		syserr("create buffer");
+	
+	
 
 	/*retb = create_retb(8);
 	pthread_t rec_t;
@@ -87,5 +94,6 @@ int main (int argc, char *argv[])
 	nadajnik_send();
 	pthread_cancel(rec_t);
 	destroy_retb(&retb);*/
+	delete_circ_fifo(&buffer);
 	return 0;
 }
