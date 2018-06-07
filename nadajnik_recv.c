@@ -37,7 +37,7 @@ void* nadajnik_recv(void* arg)
 	struct sockaddr_in caddr;
 	socklen_t rcva_len = {0};
 	int32_t len;
-	char msg[MAX_CTRL_MSG_LENGTH];
+	char msg[MAX_UDP_PACKET_SIZE];
 	struct in_addr tmp_mc_addr;
 	tmp_mc_addr.s_addr = MCAST_ADDR;
 	char mc_addr[16];

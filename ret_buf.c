@@ -5,6 +5,8 @@
 #include "ret_buf.h"
 #include "err.h"
 
+retransmit_buf retb;
+
 retransmit_buf create_retb(int size) 
 {
 	retransmit_buf rb;

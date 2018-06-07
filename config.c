@@ -17,8 +17,6 @@ uint32_t FSIZE = 128 << 10;
 uint32_t RTIME = 250;
 char NAZWA[MAX_NAME_LENGTH] = "Nienazwany Nadajnik";
 
-retransmit_buf retb;
-
 void bytetopac(audio_package * pac, const uint8_t * buf, uint32_t size) 
 {
 	if(pac->audio_data == NULL) {

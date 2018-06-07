@@ -9,7 +9,8 @@
 
 #define MAX_NAME_LENGTH 64
 #define TTL_VALUE 4
-#define MAX_CTRL_MSG_LENGTH 1001
+#define MAX_UDP_PACKET_SIZE 65527
+#define RECEIVER_TIMEOUT_MS 100
 
 //Flag settable parameters
 extern uint32_t MCAST_ADDR;

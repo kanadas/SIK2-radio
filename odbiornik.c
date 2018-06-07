@@ -7,6 +7,7 @@
 #include <netinet/in.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <errno.h>
 
 #include "odbiornik.h"
 #include "io_buffer.h"
@@ -86,6 +87,13 @@ void set_socket(int * sock, uint32_t addr, uint16_t port)
 	if(setsockopt(*sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (void*)&ip_mreq, sizeof ip_mreq) < 0)
 	  syserr("setsockopt");
 
+	struct timeval tv;
+	tv.tv_sec = RECEIVER_TIMEOUT_MS / 1000;
+	tv.tv_usec = (RECEIVER_TIMEOUT_MS % 1000) * 1000000;
+
+	if(setsockopt(*sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv)) < 0)
+		syserr("setsockopt");
+
 	/* podpięcie się pod lokalny adres i port */
 	saddr.sin_family = AF_INET;
 	saddr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -94,24 +102,47 @@ void set_socket(int * sock, uint32_t addr, uint16_t port)
 	  syserr("bind");
 }
 
-void reset_record(int * sock)
+void reset_record(int * sock, uint64_t * session_id)
 {
-	pthread_mutex_lock(&buf_mut);
+	if(buffer_waiting == 0) pthread_mutex_lock(&buf_mut);
 	buffer_waiting = 1;
+	*session_id = 0;
+	clear_buffer(&buffer);
 	set_socket(sock, actual_station.addr, actual_station.port);
 }
 
 void listen()
 {
 	int sock = init_socket();
+	int32_t len;
+	uint8_t buf[MAX_UDP_PACKET_SIZE];
+	uint64_t session_id = 0;
+	audio_package pac;
+	bytetopac(&pac, NULL, MAX_UDP_PACKET_SIZE);
 	while(1) {
 		//TODO change this 2 if's to some mutex
 		if(is_station) {
-			if(station_changed) reset_record(&sock);
-			//TODO listening
+			if(station_changed) reset_record(&sock, &session_id);
+			if((len = read(sock, buf, sizeof buf)) < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+			       syserr("read");
+			bytetopac(&pac, buf, len);
+			if(session_id == 0) session_id = pac.session_id;
+			if(session_id < pac.session_id) reset_record(&sock, &session_id);
+			else if(session_id == pac.session_id) {
+				if(buffer_waiting == 0) pthread_mutex_lock(&buf_mut);
+				push_bytes(&buffer, pac.audio_data, len - 2 * sizeof(uint64_t), pac.first_byte_num);
+				if(buffer_waiting == 1 && buffer_length(&buffer) >= BSIZE*3/4)
+					buffer_waiting = 0;
+				if(buffer_waiting == 0) pthread_mutex_unlock(&buf_mut);
+			}
 		}
 	}
+	delete_pac(&pac);
 }
+
+//TODO write (possibly change buffer)
+//TODO timer
+//TODO ui
 
 
 int main (int argc, char *argv[])
