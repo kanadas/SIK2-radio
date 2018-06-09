@@ -66,8 +66,8 @@ void *handle_connection (void *s_ptr) {
 	nbytestr(buffer, 6, IAC, DO, LINEMODE, IAC, WILL, ECHO);
 	write(msg_sock, buffer, 6);
 	//Hide cursor
-	nbytestr(buffer, 6, ESC, '[', '?', '2', '5', 'l');
-	write(msg_sock, buffer, 6);
+	//nbytestr(buffer, 6, ESC, '[', '?', '2', '5', 'l');
+	//write(msg_sock, buffer, 6);
 	//print menu
 	menu = print_station_list();
 	write(msg_sock, menu, strlen(menu));

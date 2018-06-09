@@ -215,8 +215,7 @@ int64_t delta_time(struct timeval from)
 {
 	struct timeval to;
 	gettimeofday(&to, NULL);
-	//TODO change 1e9 to 1e6 and 1e6 to 1e3
-	return ((to.tv_sec - from.tv_sec)*1e9 + to.tv_usec - from.tv_usec)/1e6;
+	return ((to.tv_sec - from.tv_sec)*1e6 + to.tv_usec - from.tv_usec)/1e3;
 }
 
 void * refresh_stations(void * arg)

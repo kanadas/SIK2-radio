@@ -67,12 +67,17 @@ void statl_time()
 {
 	int shft[station_num + 1];
 	int chg = 0;
+	int deleted = 0;
 	shft[0] = 0;
 	pthread_mutex_lock(&mut);
 	for(int i = 0; i < station_num; ++i) {
 		++station_list[i].last_resp;
+		
+		//printf("Station %d last response %d\n", i, station_list[i].last_resp);
+		
 		shft[i + 1] = shft[i];
 		if(station_list[i].last_resp == TICK_TO_EXPIRE) {
+			deleted++;
 			shft[i + 1]++;
 			if(i == actual_station_num) {
 				chg= 1;
@@ -81,7 +86,8 @@ void statl_time()
 	}
 	for(int i = 0; i < station_num; ++i)
 		station_list[i - shft[i]]  = station_list[i];
-	station_num -= shft[station_num];
+	actual_station_num -= shft[actual_station_num];
+	station_num -= deleted;
 	if(chg) {
 		if(station_num > 0) {
 			actual_station_num = 0;
@@ -93,7 +99,9 @@ void statl_time()
 		}
 		station_changed = 1;
 	}
-	if(shft[station_num]) changed++;
+	if(deleted) {
+		changed++;
+	}
 	pthread_mutex_unlock(&mut);
 }
 
