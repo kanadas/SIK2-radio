@@ -110,8 +110,8 @@ void destroy_station_list()
 
 char * print_station_list() {
 	pthread_mutex_lock(&mut);
-	int len = strlen(CLRSCR) + strlen(LIST_BEGIN) + strlen(LIST_END);
-	for(int i = 0; i < station_num; ++i) len += strlen(station_list[i].name) + 5;
+	int len = 3 + strlen(CLRSCR) + strlen(LIST_BEGIN) + strlen(LIST_END);
+	for(int i = 0; i < station_num; ++i) len += strlen(station_list[i].name) + 6;
 	char * lst = (char*)calloc(len, sizeof(char));
 	strcpy(lst, CLRSCR);
 	strcat(lst, LIST_BEGIN);

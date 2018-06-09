@@ -84,7 +84,7 @@ void* ui(void* arg)
 		msg_sock = accept(sock, (struct sockaddr *) &client_address, &client_address_len);
 		if (msg_sock < 0)
 			syserr("accept");
-		printf("New Client connected from port no %d and IP %s\n", ntohs(client_address.sin_port), inet_ntoa(client_address.sin_addr));
+		//printf("New Client connected from port no %d and IP %s\n", ntohs(client_address.sin_port), inet_ntoa(client_address.sin_addr));
 		//Parameter negotiation
 		nbytestr(buffer, 6, IAC, DO, LINEMODE, IAC, WILL, ECHO);
 		write(msg_sock, buffer, 6);

@@ -26,12 +26,16 @@ void delete_io_buffer(io_buffer * buffer)
 
 uint32_t get_bytes(io_buffer * buffer, uint8_t * buf, uint32_t num)
 {
+	if(buffer_length(buffer) < num) num = buffer_length(buffer);
 	if(buffer->n_holes && buffer->first_byte + num > buffer->holes[0]) num = buffer->holes[0] - buffer->first_byte;
 	if(num == 0) return 0;
 	uint32_t len = buffer->begin + num > buffer->size ? buffer->size - buffer->begin : num;
+
+	//printf("buffer size %d buffer begin %d end %d num %d len %d\n", buffer->size, buffer->begin, buffer->end, num, len);
+
 	memcpy(buf, buffer->buffer + buffer->begin, len);
 	if(len < num) memcpy(buf + len, buffer->buffer, num - len);
-	buffer->begin += num;
+	buffer->begin = (buffer->begin + num) % buffer->size;
 	buffer->first_byte += num;
 	/*if(buffer->n_holes && buffer->first_byte == buffer->holes[0]) {
 		buffer->first_byte += buffer->buffer[buffer->begin];
@@ -45,6 +49,7 @@ uint32_t get_bytes(io_buffer * buffer, uint8_t * buf, uint32_t num)
 
 void push_bytes(io_buffer * buffer, const uint8_t * buf, uint32_t size, uint32_t fbyte_num)
 {
+	if(buffer_length(buffer) == 0) buffer->first_byte = fbyte_num;
 	if(fbyte_num < buffer->first_byte) return;
 	uint32_t lbyte = buffer->first_byte + buffer_length(buffer);
 	uint32_t start = (buffer->begin + fbyte_num - buffer->first_byte) % buffer->size;
@@ -85,13 +90,13 @@ void push_bytes(io_buffer * buffer, const uint8_t * buf, uint32_t size, uint32_t
 				buffer->holes[i - l] = buffer->holes[i];
 			buffer->n_holes -= l;
 		}
-		buffer->begin += nfb - buffer->first_byte;
+		buffer->begin = (buffer->begin + nfb - buffer->first_byte) % buffer->size;
 		buffer->first_byte = nfb;
 	}
 	uint32_t len = start + size > buffer->size ? buffer->size - start : size;
 	memcpy(buffer->buffer + start, buf, len);
 	if(len < size) memcpy(buffer->buffer, buf + len, size - len);
-	if((buffer->end - start) % buffer->size < size)  
+	if(fbyte_num + size > lbyte)
 		buffer->end = (start + size) % buffer->size;
 }
 

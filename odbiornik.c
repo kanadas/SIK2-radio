@@ -63,7 +63,7 @@ int parse_flags(int argc, char *argv[])
 }
 
 io_buffer buffer;
-int buffer_waiting = 1;
+int buffer_waiting = 0;
 pthread_mutex_t buf_mut = PTHREAD_MUTEX_INITIALIZER;
 
 int init_socket()
@@ -82,7 +82,7 @@ void set_listen_socket(int * sock, uint32_t addr, uint16_t port, uint64_t timeou
 	ip_mreq.imr_interface.s_addr = htonl(INADDR_ANY);
 	ip_mreq.imr_multiaddr.s_addr = addr;
 	if(setsockopt(*sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (void*)&ip_mreq, sizeof ip_mreq) < 0)
-	  syserr("setsockopt ip add membership");
+		if(errno != 22) syserr("setsockopt ip add membership");
 
 	struct timeval tv;
 	tv.tv_sec = timeout / 1000;
@@ -141,7 +141,7 @@ void reset_record(int * sock, uint64_t * session_id)
 	set_listen_socket(sock, actual_station.addr, actual_station.port, RECEIVER_TIMEOUT_MS);
 	end_wait_station();
 
-	printf("Now listening on %d : %d\n", actual_station.addr, actual_station.port);
+	//printf("Now listening on %d : %d\n", actual_station.addr, actual_station.port);
 }
 
 void radio_listen()
@@ -151,6 +151,7 @@ void radio_listen()
 	uint8_t buf[MAX_UDP_PACKET_SIZE];
 	uint64_t session_id = 0;
 	audio_package pac;
+	pac.audio_data = NULL;
 	bytetopac(&pac, NULL, MAX_UDP_PACKET_SIZE);
 	reset_record(&sock, &session_id);
 
@@ -165,14 +166,19 @@ void radio_listen()
 			       syserr("read");
 		} else {
 			bytetopac(&pac, buf, len);
-			printf("got package session %lu number %lu\n", pac.session_id, pac.first_byte_num);
+			pac.first_byte_num = be64toh(pac.first_byte_num);
+			pac.session_id = be64toh(pac.session_id);
+			//printf("got package session %lu number %lu\n", pac.session_id, pac.first_byte_num);
 			if(session_id == 0) session_id = pac.session_id;
 			if(session_id < pac.session_id) reset_record(&sock, &session_id);
 			else if(session_id == pac.session_id) {
 				if(buffer_waiting == 0) pthread_mutex_lock(&buf_mut);
 				push_bytes(&buffer, pac.audio_data, len - 2 * sizeof(uint64_t), pac.first_byte_num);
-				if(buffer_waiting == 1 && buffer_length(&buffer) >= BSIZE*3/4)
+
+				//printf("Buffer size: %u full %u%%\n", buffer_length(&buffer), buffer_length(&buffer) * 100 / BSIZE);
+				if(buffer_waiting == 1 && buffer_length(&buffer) >= BSIZE*3/4) {
 					buffer_waiting = 0;
+				}
 				if(buffer_waiting == 0) pthread_mutex_unlock(&buf_mut);
 			}
 		}
@@ -188,15 +194,16 @@ void* print_data(void * arg)
 	uint32_t len;
 	while(1) {
 		pthread_mutex_lock(&buf_mut);
-		if(buffer_length(&buffer) > 0) {
-			if((len = get_bytes(&buffer, buf, WRITE_CHUNK_SIZE)) > 0) {
-				if(write(1, buf, len) != len) 
-					syserr("write");
-			} else {
-				//No data to write - reseting writing
-				clear_buffer(&buffer);
-				station_changed = 1;
-			}
+		if((len = get_bytes(&buffer, buf, WRITE_CHUNK_SIZE)) > 0) {
+
+			//printf("About to write %u bytes\n", len);
+
+			if(write(1, buf, len) != len) 
+				syserr("write");
+		} else {
+			//No data to write - reseting writing
+			clear_buffer(&buffer);
+			station_changed = 1;
 		}
 		pthread_mutex_unlock(&buf_mut);
 	}
@@ -217,22 +224,27 @@ void * refresh_stations(void * arg)
 	int * sock = (int *) arg;
 	struct timeval time;
 	struct sockaddr_in addr;
+	memset(&addr, 0, sizeof(addr));
 	addr.sin_addr.s_addr = DISCOVER_ADDR;
 	addr.sin_port = htons(CTRL_PORT);
 	char msg[REPLY_MSG_SIZE];
 	char ipaddr[16];
+	memset(ipaddr, 0, sizeof(ipaddr));
 	station s;
+	memset(&s, 0, sizeof(s));
+	int len;
 	struct in_addr inaddr;
 	while(1) {
 		gettimeofday(&time, NULL);
 		if(sendto(*sock, LOOKUP, strlen(LOOKUP), 0, (struct sockaddr *) &addr, sizeof(struct sockaddr_in)) != strlen(LOOKUP))
 			syserr("sendto");
 		while(delta_time(time) < LOOKUP_TIME_MS) {
-			if(read(*sock, msg, sizeof(msg)) < 0) {
+			if((len = read(*sock, msg, sizeof(msg))) < 0) {
 				if(errno == EAGAIN || errno == EWOULDBLOCK) 
 					continue;
 				else syserr("read");
 			}
+			msg[len] = '\0';
 
 			//printf("Got response %s\n", msg);
 			memset(s.name, 0, sizeof(s.name));
