@@ -8,7 +8,7 @@
 #include "config.h"
 
 #define TICK_TO_EXPIRE 4
-#define LOOKUP_TIME 5
+#define LOOKUP_TIME_MS 5000
 
 //Thread safe list for managing stations
 typedef struct {
@@ -20,6 +20,7 @@ typedef struct {
 
 extern station actual_station;
 extern int station_changed;
+extern int is_station;
 
 void init_station_list();
 void statl_found(const station * s);
@@ -27,6 +28,8 @@ void statl_time();
 void destroy_station_list();
 char * print_station_list();
 void change_station(int num);
+void wait_station();
+void end_wait_station();
 
 #endif //_STATION_LIST_
 

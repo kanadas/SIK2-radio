@@ -11,6 +11,8 @@
 #define TTL_VALUE 4
 #define MAX_UDP_PACKET_SIZE 65527
 #define RECEIVER_TIMEOUT_MS 100
+#define WRITE_CHUNK_SIZE 1000
+#define REPLY_MSG_SIZE 101
 
 //Flag settable parameters
 extern uint32_t MCAST_ADDR;

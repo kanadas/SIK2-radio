@@ -89,6 +89,7 @@ int main (int argc, char *argv[])
 	pthread_create(&rec_t, &attr, nadajnik_recv, NULL);
 	nadajnik_send();
 	pthread_cancel(rec_t);
+	pthread_attr_destroy(&attr);
 	destroy_retb(&retb);
 	return 0;
 }

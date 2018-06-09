@@ -36,6 +36,9 @@ static int set_socket()
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(DATA_PORT);
 	addr.sin_addr.s_addr = MCAST_ADDR;
+
+	printf("Sending to %u : %u\n", MCAST_ADDR, DATA_PORT);
+
 	if (connect(sock, (struct sockaddr *)&addr, sizeof addr) < 0)
 		syserr("connect");
 	return sock;
@@ -64,7 +67,7 @@ void retransmit(union sigval arg)
 	qsort(buf, n, sizeof(uint64_t), comp);
 	pthread_mutex_lock(&mut);
 	uint64_t fb = last_byte > FSIZE ? last_byte - FSIZE : 0;
-	while(buf[l] < fb) ++l;
+	while(l < n && buf[l] < fb) ++l;
 	while(l < n) {
 		while(l < n - 1 && buf[l] == buf[l + 1]) ++l;
 		if(buf[l] % PSIZE == 0) {
@@ -80,6 +83,7 @@ void retransmit(union sigval arg)
 	delete_pac(&pac);
 	free(buf);
 }
+
 void nadajnik_send()
 {
 	sock = set_socket();
@@ -126,6 +130,7 @@ void nadajnik_send()
 				syserr("write");
 			cnt = 0;
 			pac.first_byte_num = htobe64(last_byte);
+			//printf("First byte num %lu\n", pac.first_byte_num);
 		}
 	}
 	timer_delete(timerid);

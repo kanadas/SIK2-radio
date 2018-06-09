@@ -7,7 +7,9 @@
 #include <netinet/in.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <signal.h>
 #include <errno.h>
+#include <sys/time.h>
 
 #include "odbiornik.h"
 #include "io_buffer.h"
@@ -57,17 +59,12 @@ int parse_flags(int argc, char *argv[])
 		}
 		l += 2;
 	}	
-	if(MCAST_ADDR == 0) {
-		printf("You have to specify transmition address (-a flag)\n");
-		return 1;
-	}
 	return 0;
 }
 
 io_buffer buffer;
 int buffer_waiting = 1;
-pthread_mutex_t buf_mut;
-int is_station = 0;
+pthread_mutex_t buf_mut = PTHREAD_MUTEX_INITIALIZER;
 
 int init_socket()
 {
@@ -77,7 +74,7 @@ int init_socket()
 	return sock;
 }
 
-void set_socket(int * sock, uint32_t addr, uint16_t port)
+void set_listen_socket(int * sock, uint32_t addr, uint16_t port, uint64_t timeout)
 {
 	/* podpięcie się do grupy rozsyłania (ang. multicast) */
 	struct ip_mreq ip_mreq;
@@ -85,14 +82,13 @@ void set_socket(int * sock, uint32_t addr, uint16_t port)
 	ip_mreq.imr_interface.s_addr = htonl(INADDR_ANY);
 	ip_mreq.imr_multiaddr.s_addr = addr;
 	if(setsockopt(*sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (void*)&ip_mreq, sizeof ip_mreq) < 0)
-	  syserr("setsockopt");
+	  syserr("setsockopt ip add membership");
 
 	struct timeval tv;
-	tv.tv_sec = RECEIVER_TIMEOUT_MS / 1000;
-	tv.tv_usec = (RECEIVER_TIMEOUT_MS % 1000) * 1000000;
-
+	tv.tv_sec = timeout / 1000;
+	tv.tv_usec = (timeout % 1000) * 1000;
 	if(setsockopt(*sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv)) < 0)
-		syserr("setsockopt");
+		syserr("setsockopt so rcvtimeo");
 
 	/* podpięcie się pod lokalny adres i port */
 	saddr.sin_family = AF_INET;
@@ -102,16 +98,53 @@ void set_socket(int * sock, uint32_t addr, uint16_t port)
 	  syserr("bind");
 }
 
+void set_control_socket(int * sock, uint64_t timeout)
+{
+	int optval = 1;
+	if (setsockopt(*sock, SOL_SOCKET, SO_BROADCAST, (void*)&optval, sizeof optval) < 0)
+	  syserr("setsockopt broadcast");
+
+	/* ustawienie TTL dla datagramów rozsyłanych do grupy */ 
+	optval = TTL_VALUE;
+	if (setsockopt(*sock, IPPROTO_IP, IP_MULTICAST_TTL, (void*)&optval, sizeof optval) < 0)
+	  syserr("setsockopt multicast ttl");
+
+	optval = 1;
+	if (setsockopt(*sock, SOL_IP, IP_MULTICAST_LOOP, (void*)&optval, sizeof optval) < 0)
+	  syserr("setsockopt loop");
+	
+	struct timeval tv;
+	tv.tv_sec = timeout / 1000;
+	tv.tv_usec = (timeout % 1000) * 1000;
+	if(setsockopt(*sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv)) < 0)
+		syserr("setsockopt so rcvtimeo");
+	
+	struct sockaddr_in addr;
+	addr.sin_family = AF_INET;
+	//Not sure of this
+	addr.sin_port = htons(0);
+	addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	if (bind(*sock, (struct sockaddr *)&addr, sizeof addr) < 0)
+		syserr("bind");
+}
+
 void reset_record(int * sock, uint64_t * session_id)
 {
 	if(buffer_waiting == 0) pthread_mutex_lock(&buf_mut);
 	buffer_waiting = 1;
 	*session_id = 0;
 	clear_buffer(&buffer);
-	set_socket(sock, actual_station.addr, actual_station.port);
+	wait_station();
+	close(*sock);
+	*sock = init_socket();
+	station_changed = 0;
+	set_listen_socket(sock, actual_station.addr, actual_station.port, RECEIVER_TIMEOUT_MS);
+	end_wait_station();
+
+	printf("Now listening on %d : %d\n", actual_station.addr, actual_station.port);
 }
 
-void listen()
+void radio_listen()
 {
 	int sock = init_socket();
 	int32_t len;
@@ -119,13 +152,20 @@ void listen()
 	uint64_t session_id = 0;
 	audio_package pac;
 	bytetopac(&pac, NULL, MAX_UDP_PACKET_SIZE);
+	reset_record(&sock, &session_id);
+
+	//printf("listening\n");
+
 	while(1) {
-		//TODO change this 2 if's to some mutex
-		if(is_station) {
-			if(station_changed) reset_record(&sock, &session_id);
-			if((len = read(sock, buf, sizeof buf)) < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+		if(station_changed) {
+		       	reset_record(&sock, &session_id);
+		}
+		if((len = read(sock, buf, sizeof buf)) < 0) {
+			if(errno != EAGAIN && errno != EWOULDBLOCK)
 			       syserr("read");
+		} else {
 			bytetopac(&pac, buf, len);
+			printf("got package session %lu number %lu\n", pac.session_id, pac.first_byte_num);
 			if(session_id == 0) session_id = pac.session_id;
 			if(session_id < pac.session_id) reset_record(&sock, &session_id);
 			else if(session_id == pac.session_id) {
@@ -138,12 +178,93 @@ void listen()
 		}
 	}
 	delete_pac(&pac);
+	close(sock);
 }
 
-//TODO write (possibly change buffer)
-//TODO timer
-//TODO ui
+void* print_data(void * arg)
+{
+	(void)arg;
+	uint8_t buf[WRITE_CHUNK_SIZE];
+	uint32_t len;
+	while(1) {
+		pthread_mutex_lock(&buf_mut);
+		if(buffer_length(&buffer) > 0) {
+			if((len = get_bytes(&buffer, buf, WRITE_CHUNK_SIZE)) > 0) {
+				if(write(1, buf, len) != len) 
+					syserr("write");
+			} else {
+				//No data to write - reseting writing
+				clear_buffer(&buffer);
+				station_changed = 1;
+			}
+		}
+		pthread_mutex_unlock(&buf_mut);
+	}
+	return NULL;
+}
 
+//in miliseconds
+int64_t delta_time(struct timeval from)
+{
+	struct timeval to;
+	gettimeofday(&to, NULL);
+	//TODO change 1e9 to 1e6 and 1e6 to 1e3
+	return ((to.tv_sec - from.tv_sec)*1e9 + to.tv_usec - from.tv_usec)/1e6;
+}
+
+void * refresh_stations(void * arg)
+{
+	int * sock = (int *) arg;
+	struct timeval time;
+	struct sockaddr_in addr;
+	addr.sin_addr.s_addr = DISCOVER_ADDR;
+	addr.sin_port = htons(CTRL_PORT);
+	char msg[REPLY_MSG_SIZE];
+	char ipaddr[16];
+	station s;
+	struct in_addr inaddr;
+	while(1) {
+		gettimeofday(&time, NULL);
+		if(sendto(*sock, LOOKUP, strlen(LOOKUP), 0, (struct sockaddr *) &addr, sizeof(struct sockaddr_in)) != strlen(LOOKUP))
+			syserr("sendto");
+		while(delta_time(time) < LOOKUP_TIME_MS) {
+			if(read(*sock, msg, sizeof(msg)) < 0) {
+				if(errno == EAGAIN || errno == EWOULDBLOCK) 
+					continue;
+				else syserr("read");
+			}
+
+			//printf("Got response %s\n", msg);
+			memset(s.name, 0, sizeof(s.name));
+			sscanf(msg, REPLY" %s %hu %64c", ipaddr, &s.port, s.name);
+
+			//printf("addr = %s port = %hu name =  %s\n", ipaddr, s.port, s.name);
+			
+			if(inet_aton(ipaddr, &inaddr) != 0) {
+				s.addr = inaddr.s_addr;
+				statl_found(&s);
+			}
+		}
+		statl_time();
+	}
+	return NULL;
+}
+
+void request_retransmit(union sigval arg)
+{
+	int * sock = (int *) arg.sival_ptr;
+	char * holes = print_holes(&buffer);
+	uint32_t n;
+	if(holes != NULL) {
+		n = strlen(holes);
+		struct sockaddr_in addr;
+		addr.sin_addr.s_addr = DISCOVER_ADDR;
+		addr.sin_port = CTRL_PORT;
+		if(sendto(*sock, holes, n, 0, (struct sockaddr *)&addr, sizeof(struct sockaddr_in)) != n)
+			syserr("sendto");
+		free(holes);
+	}
+}
 
 int main (int argc, char *argv[])
 {
@@ -163,16 +284,41 @@ int main (int argc, char *argv[])
 	//Thread safe lista stacji już jest, potrzebny jeszcze globalny bufor (bardzo prosty wektor).
 	if(create_io_buffer(&buffer, BSIZE) != 0)
 		syserr("create buffer");
-	
+	init_station_list();
+	int ctrl_sock = init_socket();
+	set_control_socket(&ctrl_sock, RECEIVER_TIMEOUT_MS);
 
-	/*retb = create_retb(8);
-	pthread_t rec_t;
+	pthread_t print_t, refresh_t, ui_t;
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
-	pthread_create(&rec_t, &attr, nadajnik_recv, NULL);
-	nadajnik_send();
-	pthread_cancel(rec_t);
-	destroy_retb(&retb);*/
+	pthread_create(&print_t, &attr, print_data, NULL);
+	pthread_create(&refresh_t, &attr, refresh_stations, (void*)&ctrl_sock);
+	pthread_create(&ui_t, &attr, ui, NULL);
+        struct sigevent sigev;
+	sigev.sigev_notify = SIGEV_THREAD;
+	sigev.sigev_value.sival_int = 0;
+	sigev.sigev_notify_function = request_retransmit;
+	sigev.sigev_notify_attributes = NULL;
+	sigev.sigev_value.sival_ptr = (void*)&ctrl_sock;
+	timer_t timerid;
+	if(timer_create(CLOCK_REALTIME, &sigev, &timerid) != 0)
+		syserr("timer create");
+	struct itimerspec its;
+	its.it_value.tv_sec = 1; //Starting in 1 second
+	its.it_value.tv_nsec = 0;
+	its.it_interval.tv_sec = RTIME / 1000;
+	its.it_interval.tv_nsec = RTIME % 1000 * 1000000;
+	if(timer_settime(timerid, 0, &its, NULL) != 0)
+		syserr("timer settime");
+	radio_listen();
+	//pthread_cancel(print_t);
+	//pthread_cancel(refresh_t);
+	//pthread_cancel(ui_t);
+	//timer_delete(timerid);
+	//pthread_attr_destroy(&attr);
 	delete_io_buffer(&buffer);
+	destroy_station_list();
+	pthread_mutex_destroy(&buf_mut);
+	close(ctrl_sock);
 	return 0;
 }

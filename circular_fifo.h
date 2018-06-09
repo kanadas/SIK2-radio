@@ -16,14 +16,14 @@ int create_circ_fifo(circular_fifo * fifo, uint32_t size);
 void get_bytes(const circular_fifo * fifo, uint8_t * buffer, uint32_t offset, uint32_t num);
 
 //Returns amount of actually returned bytes <= num
-int pop_bytes(const circular_fifo * fifo, uint8_t * buffer, uint32_t num);
+int pop_bytes(circular_fifo * fifo, uint8_t * buffer, uint32_t num);
 
 //Automatically overrides old data when lacking space
 void push_byte(circular_fifo * fifo, uint8_t byte);
 
 void insert_bytes(circular_fifo * fifo, const uint8_t * buf, uint32_t size, uint32_t pos);
 
-inline uint32_t fifo_length(const circular_fifo * fifo);
+uint32_t fifo_length(const circular_fifo * fifo);
 
 void delete_circ_fifo(circular_fifo * fifo);
 
