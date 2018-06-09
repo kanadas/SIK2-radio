@@ -52,7 +52,7 @@ void statl_found(const station * s)
 	memcpy(&station_list[l], s, sizeof(station));
 	station_list[l].last_resp = 0;
 	++station_num;
-	if(actual_station_num < 0 && (strcmp(NAZWA, "") == 0 || strcmp(NAZWA, station_list[l].name))) {
+	if(actual_station_num < 0 && (strcmp(NAZWA, "") == 0 || strcmp(NAZWA, station_list[l].name) == 0)) {
 		actual_station_num = l;
 		station_changed = 1;
 		actual_station = station_list[l];
