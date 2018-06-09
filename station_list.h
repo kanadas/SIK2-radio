@@ -30,6 +30,7 @@ char * print_station_list();
 void change_station(int num);
 void wait_station();
 void end_wait_station();
+uint64_t list_changed();
 
 #endif //_STATION_LIST_
 

@@ -7,6 +7,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdarg.h>
+#include <errno.h>
 
 #include "err.h"
 #include "config.h"
@@ -47,6 +48,65 @@ void nbytestr(char * out, int argc, ...)
 	va_end(arg);
 }
 
+void *handle_connection (void *s_ptr) {
+	char buffer[BUFFER_SIZE];
+	char * menu;
+	ssize_t len, snd_len;
+	int msg_sock = *(int*)s_ptr;
+	free(s_ptr);
+        struct timeval tv;
+	uint64_t changed = 0;
+	tv.tv_sec = UI_TIMEOUT_MS  / 1000;
+	tv.tv_usec = (UI_TIMEOUT_MS % 1000) * 1000;
+	if(setsockopt(msg_sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv)) < 0)
+		syserr("setsockopt so rcvtimeo");
+	
+	//printf("New Client connected from port no %d and IP %s\n", ntohs(client_address.sin_port), inet_ntoa(client_address.sin_addr));
+	//Parameter negotiation
+	nbytestr(buffer, 6, IAC, DO, LINEMODE, IAC, WILL, ECHO);
+	write(msg_sock, buffer, 6);
+	//Hide cursor
+	nbytestr(buffer, 6, ESC, '[', '?', '2', '5', 'l');
+	write(msg_sock, buffer, 6);
+	//print menu
+	menu = print_station_list();
+	write(msg_sock, menu, strlen(menu));
+	free(menu);
+	do {
+		//read character
+		len = read(msg_sock, buffer, sizeof(buffer));
+		if (len < 0) {
+			if(errno != EAGAIN && errno != EWOULDBLOCK) syserr("reading from client socket");
+		} else if(len > 0) {
+
+				//printf("read from socket: %zd bytes: ", len);
+				//for(int asdf = 0; asdf < len; ++asdf) printf("%d ", buffer[asdf]);
+				//printf("\n");
+			
+			//Arrows
+			if(buffer[0] == '\033' && buffer[1] == '[') {
+				if(buffer[2] == 'A') change_station(-1);
+				else if(buffer[2] == 'B') change_station(1);
+			}
+		}
+		if(list_changed() != changed) {
+			changed = list_changed();
+			menu = print_station_list();
+			snd_len = write(msg_sock, menu, strlen(menu));
+			if (snd_len != (ssize_t)strlen(menu))
+				syserr("writing to client socket");
+			free(menu);
+		}
+	} while (len != 0);
+	//Show cursor
+	nbytestr(buffer, 6, ESC, '[', '?', '2', '5', 'h');
+	write(msg_sock, buffer, 6);
+	printf("ending connection\n");
+	if (close(msg_sock) < 0)
+	  syserr("close");
+	return 0;
+}
+
 void* ui(void* arg)
 {
 	(void)arg;
@@ -54,10 +114,6 @@ void* ui(void* arg)
 	struct sockaddr_in server_address;
 	struct sockaddr_in client_address;
 	socklen_t client_address_len;
-
-	char buffer[BUFFER_SIZE];
-	char * menu;
-	ssize_t len, snd_len;
 
 	int port_num = UI_PORT;
 	sock = socket(PF_INET, SOCK_STREAM, 0); // creating IPv4 TCP socket
@@ -84,47 +140,13 @@ void* ui(void* arg)
 		msg_sock = accept(sock, (struct sockaddr *) &client_address, &client_address_len);
 		if (msg_sock < 0)
 			syserr("accept");
-		//printf("New Client connected from port no %d and IP %s\n", ntohs(client_address.sin_port), inet_ntoa(client_address.sin_addr));
-		//Parameter negotiation
-		nbytestr(buffer, 6, IAC, DO, LINEMODE, IAC, WILL, ECHO);
-		write(msg_sock, buffer, 6);
-		//Hide cursor
-		nbytestr(buffer, 6, ESC, '[', '?', '2', '5', 'l');
-		write(msg_sock, buffer, 6);
-		//print menu
-		menu = print_station_list();
-		write(msg_sock, menu, strlen(menu));
-		free(menu);
-		do {
-			//read character
-			len = read(msg_sock, buffer, sizeof(buffer));
-			if (len < 0)
-				syserr("reading from client socket");
-			else {
-
-					//printf("read from socket: %zd bytes: ", len);
-					//for(int asdf = 0; asdf < len; ++asdf) printf("%d ", buffer[asdf]);
-					//printf("\n");
-				
-				//Arrows
-				if(buffer[0] == '\033' && buffer[1] == '[') {
-					if(buffer[2] == 'A') change_station(-1);
-					else if(buffer[2] == 'B') change_station(1);
-				}
-			}
-			//print menu
-			menu = print_station_list();
-			snd_len = write(msg_sock, menu, strlen(menu));
-			if (snd_len != (ssize_t)strlen(menu))
-				syserr("writing to client socket");
-			free(menu);
-		} while (len > 0);
-		//Show cursor
-		nbytestr(buffer, 6, ESC, '[', '?', '2', '5', 'h');
-		write(msg_sock, buffer, 6);
-		printf("ending connection\n");
-		if (close(msg_sock) < 0)
-		  syserr("close");
+		int * arg = (int*)malloc(sizeof(int));
+		*arg = msg_sock;
+		pthread_t thread;
+		if(pthread_create(&thread, 0, handle_connection, arg) == -1)
+			syserr("pthread create");
+		if(pthread_detach(thread) == -1)
+			syserr("pthread detatch");
 	}
 	return 0;
 }

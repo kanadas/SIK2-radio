@@ -12,6 +12,7 @@ int station_changed;
 static pthread_mutex_t mut;
 static station * station_list;
 static int slsize;
+uint64_t changed = 0;
 int station_num;
 int actual_station_num;
 int is_station = 0;
@@ -57,6 +58,7 @@ void statl_found(const station * s)
 		actual_station = station_list[l];
 		pthread_mutex_unlock(&no_stat_m);
 	}
+	++changed;
 	pthread_mutex_unlock(&mut);
 	//printf("Number of stations %d actual_station_num %d station_changed %d\n", station_num, actual_station_num, station_changed);
 }
@@ -91,6 +93,7 @@ void statl_time()
 		}
 		station_changed = 1;
 	}
+	if(shft[station_num]) changed++;
 	pthread_mutex_unlock(&mut);
 }
 
@@ -131,6 +134,7 @@ void change_station(int num) {
 	actual_station_num += num;
 	actual_station = station_list[actual_station_num];
 	station_changed = 1;
+	++changed;
 }
 
 void wait_station()
@@ -141,5 +145,10 @@ void wait_station()
 void end_wait_station()
 {
 	pthread_mutex_unlock(&no_stat_m);
+}
+
+uint64_t list_changed()
+{
+	return changed;
 }
 

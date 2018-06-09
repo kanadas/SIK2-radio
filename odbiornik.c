@@ -298,7 +298,7 @@ int main (int argc, char *argv[])
 		syserr("create buffer");
 	init_station_list();
 	int ctrl_sock = init_socket();
-	set_control_socket(&ctrl_sock, RECEIVER_TIMEOUT_MS);
+	set_control_socket(&ctrl_sock, CONTROL_TIMEOUT_MS);
 
 	pthread_t print_t, refresh_t, ui_t;
 	pthread_attr_t attr;
