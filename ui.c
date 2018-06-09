@@ -101,7 +101,6 @@ void *handle_connection (void *s_ptr) {
 	//Show cursor
 	nbytestr(buffer, 6, ESC, '[', '?', '2', '5', 'h');
 	write(msg_sock, buffer, 6);
-	printf("ending connection\n");
 	if (close(msg_sock) < 0)
 	  syserr("close");
 	return 0;

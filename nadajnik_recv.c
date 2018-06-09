@@ -56,6 +56,7 @@ void* nadajnik_recv(void* arg)
 
 		if (len < 0) 
 			syserr("error on datagram from client socket");
+		msg[len] = '\0';
 		if (strncmp(msg, LOOKUP, strlen(LOOKUP)) == 0) {
 			sprintf(msg, "%s %s %d %s", REPLY, mc_addr, DATA_PORT, NAZWA);
 
@@ -69,11 +70,17 @@ void* nadajnik_recv(void* arg)
 			char *tmp = msg + strlen(REXMIT) + 1;
 			char *tmp2;
 			uint64_t num;
+
+			//printf("Got rexmit %s\n", msg);
+
 			while(*tmp != '\0') {
 				num = strtoul(tmp, &tmp2, 10);
 				if (tmp2 == tmp)
 					break;
 				retb_append(&retb, num);
+
+				//printf("Appended package %lu to retransmit\n", num);
+
 				if(*tmp2 == '\0')
 					break;
 				tmp = tmp2 + 1;

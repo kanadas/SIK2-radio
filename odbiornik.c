@@ -168,6 +168,7 @@ void radio_listen()
 			bytetopac(&pac, buf, len);
 			pac.first_byte_num = be64toh(pac.first_byte_num);
 			pac.session_id = be64toh(pac.session_id);
+
 			//printf("got package session %lu number %lu\n", pac.session_id, pac.first_byte_num);
 			if(session_id == 0) session_id = pac.session_id;
 			if(session_id < pac.session_id) reset_record(&sock, &session_id);
@@ -194,10 +195,10 @@ void* print_data(void * arg)
 	uint32_t len;
 	while(1) {
 		pthread_mutex_lock(&buf_mut);
-		if((len = get_bytes(&buffer, buf, WRITE_CHUNK_SIZE)) > 0) {
-
+		len = get_bytes(&buffer, buf, WRITE_CHUNK_SIZE);
+		pthread_mutex_unlock(&buf_mut);
+		if (len  > 0) {
 			//printf("About to write %u bytes\n", len);
-
 			if(write(1, buf, len) != len) 
 				syserr("write");
 		} else {
@@ -205,7 +206,6 @@ void* print_data(void * arg)
 			clear_buffer(&buffer);
 			station_changed = 1;
 		}
-		pthread_mutex_unlock(&buf_mut);
 	}
 	return NULL;
 }
@@ -267,10 +267,13 @@ void request_retransmit(union sigval arg)
 	char * holes = print_holes(&buffer);
 	uint32_t n;
 	if(holes != NULL) {
+
+		//printf("%s\n", holes);
+		
 		n = strlen(holes);
 		struct sockaddr_in addr;
 		addr.sin_addr.s_addr = DISCOVER_ADDR;
-		addr.sin_port = CTRL_PORT;
+		addr.sin_port = htons(CTRL_PORT);
 		if(sendto(*sock, holes, n, 0, (struct sockaddr *)&addr, sizeof(struct sockaddr_in)) != n)
 			syserr("sendto");
 		free(holes);

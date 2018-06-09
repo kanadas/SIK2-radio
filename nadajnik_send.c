@@ -37,8 +37,6 @@ static int set_socket()
 	addr.sin_port = htons(DATA_PORT);
 	addr.sin_addr.s_addr = MCAST_ADDR;
 
-	printf("Sending to %u : %u\n", MCAST_ADDR, DATA_PORT);
-
 	if (connect(sock, (struct sockaddr *)&addr, sizeof addr) < 0)
 		syserr("connect");
 	return sock;
@@ -71,8 +69,12 @@ void retransmit(union sigval arg)
 	while(l < n) {
 		while(l < n - 1 && buf[l] == buf[l + 1]) ++l;
 		if(buf[l] % PSIZE == 0) {
-			pac.first_byte_num = buf[l];
+			pac.session_id = session_id;
+			pac.first_byte_num = htobe64(buf[l]);
 			get_bytes(&fifo, pac.audio_data, buf[l] - fb, PSIZE);
+
+			//printf("Sending retransmit fbn %lu msg %s\n", pac.first_byte_num, pac.audio_data);
+
 			pactobyte(&pac, buffer, PSIZE);
 			if (write(sock, (void*)buffer, sizeof(buffer)) != (ssize_t)sizeof(buffer))
 				syserr("write");
@@ -129,6 +131,8 @@ void nadajnik_send()
 			if (write(sock, (void*)buf, sizeof(buf)) != (ssize_t)sizeof(buf))
 				syserr("write");
 			cnt = 0;
+
+
 			pac.first_byte_num = htobe64(last_byte);
 			//printf("First byte num %lu\n", pac.first_byte_num);
 		}
